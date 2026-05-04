@@ -1,6 +1,9 @@
 set(sources
     ./can-sink.cpp
     ./can-source.cpp
+    ./client-reconnect-test.cpp
+    ./client-resub-all-test.cpp
+    ./client-resub-test.cpp
     ./client-sink.cpp
     ./client-source.cpp
     ./lazy-publish.cpp
