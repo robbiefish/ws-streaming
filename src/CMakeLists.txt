@@ -9,7 +9,9 @@ set(sources
     ./detail/in_band_command_interface_client.cpp
     ./detail/linear_table.cpp
     ./detail/local_signal_container.cpp
+    ./detail/base_peer.cpp
     ./detail/peer.cpp
+    ./detail/peer_tls.cpp
     ./detail/remote_signal_container.cpp
     ./detail/remote_signal_impl.cpp
     ./detail/semver.cpp
@@ -33,6 +35,7 @@ set(headers
     ../include/ws-streaming/connection.hpp
     ../include/ws-streaming/data_types.hpp
     ../include/ws-streaming/detail/base64.hpp
+    ../include/ws-streaming/detail/base_peer.hpp
     ../include/ws-streaming/detail/command_interface_client_factory.hpp
     ../include/ws-streaming/detail/command_interface_client.hpp
     ../include/ws-streaming/detail/connected_client.hpp
@@ -46,6 +49,7 @@ set(headers
     ../include/ws-streaming/detail/linear_table.hpp
     ../include/ws-streaming/detail/local_signal_container.hpp
     ../include/ws-streaming/detail/peer.hpp
+    ../include/ws-streaming/detail/peer_tls.hpp
     ../include/ws-streaming/detail/registered_local_signal.hpp
     ../include/ws-streaming/detail/remote_signal_container.hpp
     ../include/ws-streaming/detail/remote_signal_impl.hpp
@@ -99,6 +103,8 @@ target_include_directories(
             .
 )
 
+find_package(OpenSSL REQUIRED)
+
 target_link_libraries(${PROJECT_NAME}
     PUBLIC
         Boost::archive
@@ -110,6 +116,8 @@ target_link_libraries(${PROJECT_NAME}
         Boost::signals2
         Boost::uuid
         nlohmann_json::nlohmann_json
+        OpenSSL::SSL
+        OpenSSL::Crypto
 )
 
 if(WS_STREAMING_INSTALL)
