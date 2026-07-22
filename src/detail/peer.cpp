@@ -267,7 +267,7 @@ void wss::detail::peer::process_buffer_ws()
         std::memmove(
             &_rx_buffer[0],
             &_rx_buffer[header.header_size + header.payload_size],
-            _rx_buffer_bytes - header.header_size + header.payload_size);
+            _rx_buffer_bytes - (header.header_size + header.payload_size));
         _rx_buffer_bytes -= header.header_size + header.payload_size;
     }
 
