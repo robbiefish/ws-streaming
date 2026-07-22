@@ -9,6 +9,8 @@
 std::pair<bool, wss::detail::remote_signal_container::remote_signal_entry&>
 wss::detail::remote_signal_container::add_remote_signal(const std::string& id)
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = _signals_by_id.find(id);
     if (it != _signals_by_id.end())
         return std::make_pair(true, std::ref(it->second));
@@ -20,6 +22,8 @@ wss::detail::remote_signal_container::add_remote_signal(const std::string& id)
 wss::detail::remote_signal_container::remote_signal_entry *
 wss::detail::remote_signal_container::find_remote_signal(const std::string& id)
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = _signals_by_id.find(id);
     if (it == _signals_by_id.end())
         return nullptr;
@@ -30,6 +34,8 @@ wss::detail::remote_signal_container::find_remote_signal(const std::string& id)
 wss::detail::remote_signal_container::remote_signal_entry *
 wss::detail::remote_signal_container::find_remote_signal(unsigned signo)
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = _signals_by_signo.find(signo);
     if (it == _signals_by_signo.end())
         return nullptr;
@@ -40,6 +46,8 @@ wss::detail::remote_signal_container::find_remote_signal(unsigned signo)
 const wss::detail::remote_signal_container::remote_signal_entry *
 wss::detail::remote_signal_container::find_remote_signal(const std::string& id) const
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = _signals_by_id.find(id);
     if (it == _signals_by_id.end())
         return nullptr;
@@ -50,6 +58,8 @@ wss::detail::remote_signal_container::find_remote_signal(const std::string& id) 
 const wss::detail::remote_signal_container::remote_signal_entry *
 wss::detail::remote_signal_container::find_remote_signal(unsigned signo) const
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = _signals_by_signo.find(signo);
     if (it == _signals_by_signo.end())
         return nullptr;

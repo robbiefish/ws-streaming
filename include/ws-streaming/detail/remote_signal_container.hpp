@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -86,6 +87,7 @@ namespace wss::detail
 
         private:
 
+            mutable std::mutex _mutex;
             std::map<std::string, remote_signal_entry> _signals_by_id;
             std::map<unsigned, remote_signal_entry *> _signals_by_signo;
     };
