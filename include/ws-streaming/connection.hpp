@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
@@ -310,6 +311,7 @@ namespace wss
 
             bool _is_client;
             std::shared_ptr<detail::base_peer> _peer;
+            boost::asio::any_io_executor _executor;
 
             detail::semver _api_version;
             std::string _remote_stream_id;
