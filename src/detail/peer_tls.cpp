@@ -64,14 +64,18 @@ void wss::detail::peer_tls::send_metadata(
 
 void wss::detail::peer_tls::do_read()
 {
+    // Keep this peer (and therefore its ssl::stream and _rx_buffer) alive for the whole
+    // duration of the async_read. Boost.Asio requires both the stream and the buffer to remain
+    // valid until the completion handler runs
+    auto self = std::static_pointer_cast<peer_tls>(shared_from_this());
+
     _stream.async_read_some(
         boost::asio::buffer(
             _rx_buffer.data() + _rx_buffer_bytes,
             _rx_buffer.size() - _rx_buffer_bytes),
-        [self_weak = weak_from_this()](const boost::system::error_code& ec, std::size_t bytes_transferred)
+        [self](const boost::system::error_code& ec, std::size_t bytes_transferred)
         {
-            if (auto self = std::static_pointer_cast<peer_tls>(self_weak.lock()))
-                self->finish_read(ec, bytes_transferred);
+            self->finish_read(ec, bytes_transferred);
         });
 }
 
@@ -94,13 +98,18 @@ void wss::detail::peer_tls::do_write()
 {
     _write_in_flight = true;
 
+    // The buffer handed to Boost.Asio, and the ssl::stream itself, must stay valid until this
+    // async_write completes. Without this, closing the socket during teardown
+    // cancels the write but its completion is dequeued only later, after the peer has already been destroyed
+    auto self = std::static_pointer_cast<peer_tls>(shared_from_this());
+    auto message = _tx_queue.front().data;
+
     boost::asio::async_write(
         _stream,
-        boost::asio::buffer(*_tx_queue.front().data),
-        [self_weak = weak_from_this()](const boost::system::error_code& ec, std::size_t bytes_transferred)
+        boost::asio::buffer(*message),
+        [self, message](const boost::system::error_code& ec, std::size_t bytes_transferred)
         {
-            if (auto self = std::static_pointer_cast<peer_tls>(self_weak.lock()))
-                self->finish_write(ec, bytes_transferred);
+            self->finish_write(ec, bytes_transferred);
         });
 }
 
