@@ -143,6 +143,8 @@ void wss::client::async_connect(
                     return;
                 }
 
+                stream.next_layer().expires_never();
+
                 auto connection = std::make_shared<wss::connection>(
                     std::move(stream),
                     true,

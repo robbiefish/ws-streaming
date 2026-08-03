@@ -401,10 +401,16 @@ namespace wss::detail
                     {
                         if constexpr (is_tls)
                         {
+                            // TLS stream cannot be detached from its tcp_stream the way the
+                            // plaintext branch below detaches the bare socket. The deadline
+                            // armed for the HTTP phase would travel to the new owner and close
+                            // the socket mid-session; disarm it explicitly instead.
+                            tcp_layer().expires_never();
                             return on_websocket_upgrade(stream);
                         }
                         else
                         {
+                            // release_socket() cancels the deadline
                             auto socket = stream.release_socket();
                             return on_websocket_upgrade(socket);
                         }
