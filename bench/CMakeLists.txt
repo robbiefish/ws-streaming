@@ -1,0 +1,24 @@
+set(sources
+    ./peer_throughput.cpp
+)
+
+foreach(source ${sources})
+
+    get_filename_component(name ${source} NAME_WE)
+    string(REPLACE "_" "-" name ${name})
+
+    add_executable(${name} ${source})
+
+    set_target_properties(${name} PROPERTIES
+        CXX_STANDARD            17
+        CXX_STANDARD_REQUIRED   ON
+        CXX_EXTENSIONS          OFF
+    )
+
+    target_link_libraries(${name}
+        PUBLIC
+            Threads::Threads
+            ws-streaming::ws-streaming
+    )
+
+endforeach()
