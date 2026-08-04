@@ -199,7 +199,7 @@ void wss::detail::peer::finish_wait_tx(const boost::system::error_code& wait_ec)
             return close();
     }
 
-    if (bytes_sent < _tx_buffer_bytes)
+    if (_tx_buffer_bytes)
         do_wait_tx();
 }
 
