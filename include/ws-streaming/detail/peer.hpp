@@ -73,11 +73,14 @@ namespace wss::detail
              *     6455. The masking feature is not currently implemented.
              * @param use_tcp_protocol True to use the direct TCP protocol instead of the
              *     WebSocket-based protocol.
-             * @param rx_buffer_size The desired size of the receive buffer. The receive buffer
-             *     does not grow, so this value sets an upper bound on the size of frames the peer
-             *     can receive: larger frames will result in an error and cause the connection to
-             *     be closed. The specified value does not include the operating system's internal
-             *     receive buffer.
+             * @param rx_buffer_size The maximum size of the receive buffer. The buffer starts out
+             *     small and grows on demand up to this size, so the value sets an upper bound on
+             *     the size of frames the peer can receive: larger frames will result in an error
+             *     and cause the connection to be closed. Memory is only committed as incoming
+             *     traffic actually requires it, which matters when many connections are open at
+             *     once. Once grown, the buffer is not shrunk again for the lifetime of the peer.
+             *     The specified value does not include the operating system's internal receive
+             *     buffer.
              * @param tx_buffer_size The desired size of the transmit buffer. The transmit buffer
              *     does not grow, so this value sets an upper bound on the size of frames the peer
              *     can transmit: larger frames will result in an error and cause the connection to
@@ -232,7 +235,26 @@ namespace wss::detail
 
         private:
 
+            /**
+             * The size the receive buffer is allocated at. It grows from here on demand, so this
+             * only needs to be large enough that ordinary traffic never has to grow it.
+             */
+            static constexpr std::size_t INITIAL_RX_BUFFER_SIZE = 64 * 1024;
+
             void set_send_buffer_size(std::size_t size);
+
+            /**
+             * Grows the receive buffer, doubling it without exceeding the configured maximum.
+             *
+             * Because this reallocates, it invalidates every pointer into the receive buffer, and
+             * so must never be called while a frame is being processed: process_websocket_frame()
+             * and the on_data_received signal hand pointers into the buffer out to their callers.
+             * Both call sites therefore sit outside the parsing loop.
+             *
+             * @return True if the buffer was grown, or false if it had already reached its
+             *     configured maximum size.
+             */
+            bool grow_rx_buffer();
 
             void do_wait_rx();
             void do_wait_tx();
@@ -396,6 +418,7 @@ namespace wss::detail
             detail::dynamic_buffer _tx_buffer;
 
             std::size_t _rx_buffer_bytes = 0;
+            std::size_t _rx_buffer_max = 0;
 
             bool _waiting_tx = false;
             bool _shutdown_when_empty = false;

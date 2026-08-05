@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -30,8 +31,9 @@ wss::detail::peer::peer(
         std::size_t tx_buffer_size)
     : _socket{std::move(socket)}
     , _use_tcp_protocol(use_tcp_protocol)
-    , _rx_buffer(rx_buffer_size)
+    , _rx_buffer(std::min(INITIAL_RX_BUFFER_SIZE, rx_buffer_size))
     , _tx_buffer(tx_buffer_size)
+    , _rx_buffer_max(rx_buffer_size)
 {
     _socket.non_blocking(true);
     set_send_buffer_size(tx_buffer_size);
@@ -44,6 +46,12 @@ void wss::detail::peer::run()
 
 void wss::detail::peer::run(const void *data, std::size_t size)
 {
+    // Make room for the handed-over data, which arrives before any read has happened.
+    while (size > _rx_buffer.size() && grow_rx_buffer())
+    {
+        // do nothing
+    }
+
     // The data cannot be stored, so there is nothing to process: returning here is what keeps the
     // copy below from running past the end of the buffer.
     if (size > _rx_buffer.size())
@@ -116,6 +124,18 @@ void wss::detail::peer::set_send_buffer_size(std::size_t size)
     boost::system::error_code ec;
     auto option = boost::asio::socket_base::send_buffer_size{static_cast<int>(size)};
     _socket.set_option(option, ec);
+}
+
+bool wss::detail::peer::grow_rx_buffer()
+{
+    if (_rx_buffer.size() >= _rx_buffer_max)
+        return false;
+
+    // Doubling reaches the maximum in a handful of steps, and the buffer is never shrunk again,
+    // so a connection reallocates only a few times however long it lives.
+    _rx_buffer.resize(std::min(_rx_buffer.size() * 2, _rx_buffer_max));
+
+    return true;
 }
 
 void wss::detail::peer::do_wait_rx()
@@ -240,9 +260,10 @@ void wss::detail::peer::process_buffer_tcp()
             _rx_buffer_bytes);
     }
 
-    // If the read buffer is still full after processing, it is an error condition
-    // (the client must be sending a frame larger than our fixed-size read buffer).
-    if (_rx_buffer_bytes == _rx_buffer.size())
+    // Nothing could be parsed and the buffer is full, so the frame being received needs more room
+    // than the buffer currently has. Grow it, or give up once it has reached its maximum size:
+    // that means the remote peer is sending a frame we have no way of holding.
+    if (_rx_buffer_bytes == _rx_buffer.size() && !grow_rx_buffer())
         return close(boost::asio::error::no_buffer_space);
 
     do_wait_rx();
@@ -291,9 +312,10 @@ void wss::detail::peer::process_buffer_ws()
             _rx_buffer_bytes);
     }
 
-    // If the read buffer is still full after processing, it is an error condition
-    // (the client must be sending a frame larger than our fixed-size read buffer).
-    if (_rx_buffer_bytes == _rx_buffer.size())
+    // Nothing could be parsed and the buffer is full, so the frame being received needs more room
+    // than the buffer currently has. Grow it, or give up once it has reached its maximum size:
+    // that means the remote peer is sending a frame we have no way of holding.
+    if (_rx_buffer_bytes == _rx_buffer.size() && !grow_rx_buffer())
         return close(boost::asio::error::no_buffer_space);
 
     do_wait_rx();
