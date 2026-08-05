@@ -44,7 +44,10 @@ void wss::detail::peer::run()
 
 void wss::detail::peer::run(const void *data, std::size_t size)
 {
+    // The data cannot be stored, so there is nothing to process: returning here is what keeps the
+    // copy below from running past the end of the buffer.
     if (size > _rx_buffer.size())
+    {
         boost::asio::post(
             _socket.get_executor(),
             [self_weak = weak_from_this()]()
@@ -52,6 +55,9 @@ void wss::detail::peer::run(const void *data, std::size_t size)
                 if (auto self = self_weak.lock())
                     self->close(boost::asio::error::no_buffer_space);
             });
+
+        return;
+    }
 
     std::memcpy(
         _rx_buffer.data(),
