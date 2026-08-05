@@ -18,6 +18,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <ws-streaming/detail/dynamic_buffer.hpp>
 #include <ws-streaming/detail/streaming_protocol.hpp>
 #include <ws-streaming/detail/websocket_protocol.hpp>
 
@@ -368,22 +369,16 @@ namespace wss::detail
             template <typename ConstBufferSequence>
             void enqueue(
                 const ConstBufferSequence& buffers,
-                std::size_t /*size*/,
+                std::size_t size,
                 bool do_shutdown_after)
             {
-                std::size_t bytes_buffered = boost::asio::buffer_copy(
-                    boost::asio::mutable_buffer(
-                        _tx_buffer.data() + _tx_buffer_bytes,
-                        _tx_buffer.size() - _tx_buffer_bytes),
-                    buffers);
-
-                _tx_buffer_bytes += bytes_buffered;
-
-                if (_tx_buffer_bytes == _tx_buffer.size())
+                // If the buffer could not take everything, the frame stream would be truncated,
+                // so the connection cannot continue.
+                if (_tx_buffer.write(buffers) < size)
                     return close(boost::asio::error::no_buffer_space);
 
                 if (do_shutdown_after)
-                    _shutdown_after = _tx_buffer_bytes;
+                    _shutdown_when_empty = true;
 
                 if (!_waiting_tx)
                     do_wait_tx();
@@ -398,13 +393,12 @@ namespace wss::detail
             bool _is_closed = false;
 
             std::vector<std::uint8_t> _rx_buffer;
-            std::vector<std::uint8_t> _tx_buffer;
+            detail::dynamic_buffer _tx_buffer;
 
             std::size_t _rx_buffer_bytes = 0;
-            std::size_t _tx_buffer_bytes = 0;
 
             bool _waiting_tx = false;
-            std::size_t _shutdown_after = 0;
+            bool _shutdown_when_empty = false;
 
             boost::system::error_code _close_ec;
     };

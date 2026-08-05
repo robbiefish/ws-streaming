@@ -1,5 +1,6 @@
 set(sources
     ./test_base64.cpp
+    ./test_dynamic_buffer.cpp
     ./test_semver.cpp
 )
 

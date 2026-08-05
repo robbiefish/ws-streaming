@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -175,31 +174,22 @@ void wss::detail::peer::finish_wait_tx(const boost::system::error_code& wait_ec)
         return close(wait_ec);
 
     // Since the socket is writeable, write as much as we can to it.
-    std::size_t bytes_sent = _socket.send(
-        boost::asio::buffer(_tx_buffer.data(), _tx_buffer_bytes),
-        0,
-        send_ec);
+    std::size_t bytes_sent = _socket.send(_tx_buffer.data(), 0, send_ec);
 
     // Was there a genuine error writing to the socket?
     if (send_ec && send_ec != boost::asio::error::would_block)
         return close(send_ec);
 
-    // If we sent all the data in our buffer, we can stop now.
-    if (bytes_sent)
-        std::memmove(
-            _tx_buffer.data(),
-            &_tx_buffer[bytes_sent],
-            _tx_buffer_bytes - bytes_sent);
-    _tx_buffer_bytes -= bytes_sent;
+    _tx_buffer.consume(bytes_sent);
 
-    if (_shutdown_after)
-    {
-        _shutdown_after -= std::min(bytes_sent, _shutdown_after);
-        if (_shutdown_after == 0)
-            return close();
-    }
+    // If a close frame was queued, disconnect once everything queued behind it has been sent.
+    if (_shutdown_when_empty && _tx_buffer.empty())
+        return close();
 
-    if (_tx_buffer_bytes)
+    // As long as anything remains buffered, a write wait must stay active: write() treats
+    // _waiting_tx as "there is buffered data ahead of you" and sends directly to the socket when
+    // it is clear.
+    if (!_tx_buffer.empty())
         do_wait_tx();
 }
 
