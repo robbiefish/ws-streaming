@@ -73,6 +73,26 @@ namespace wss::detail
         }
 
         /**
+         * Builds a client-side TLS context which does not authenticate the server.
+         *
+         * The connection is encrypted, but whatever certificate the server presents is accepted:
+         * this provides confidentiality without authentication, and no protection against an
+         * active man-in-the-middle. Use it only where the server is trusted by other means.
+         *
+         * Because the server is not authenticated, presenting a client certificate to it serves
+         * no purpose, and none is configured.
+         */
+        inline boost::asio::ssl::context make_client_tls_context_without_verification()
+        {
+            boost::asio::ssl::context ctx(boost::asio::ssl::context::tls_client);
+            apply_common_options(ctx);
+
+            ctx.set_verify_mode(boost::asio::ssl::verify_none);
+
+            return ctx;
+        }
+
+        /**
          * Builds a server-side TLS context.
          *
          * @param cert_file Path to the server certificate chain (PEM). Required.

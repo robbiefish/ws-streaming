@@ -300,6 +300,17 @@ client.async_connect(
     });
 ----
 
+A client that cannot be given a CA file calls `enable_tls_without_verification()` instead. The
+connection is still encrypted, but the server is not authenticated: whatever certificate it
+presents is accepted. This leaves the connection open to an active man-in-the-middle, so use it
+only where the server is trusted by other means. Presenting a client certificate to an
+unauthenticated server serves no purpose, so mutual TLS is not available in this mode.
+
+[source,cpp]
+----
+client.enable_tls_without_verification();
+----
+
 A server accepts encrypted connections on ports added with `add_tls_listener()`, which requires a
 certificate chain and a private key. Encrypted and unencrypted listeners can be used at the same
 time, and each connection is serviced according to the listener that accepted it. Note that
@@ -333,9 +344,10 @@ an out-of-band command interface are not: the library always connects to one in 
 from a `wss://` connection.
 
 NOTE: TLS 1.2 is the oldest accepted protocol version; SSL 2.0, SSL 3.0, TLS 1.0 and TLS 1.1 are
-disabled. Certificates are verified against the configured CA file, but the peer's hostname is
-_not_ checked against the certificate it presents: any certificate issued by a trusted CA is
-accepted, whichever host it was issued for. Finally, a `server` object holds a single TLS
+disabled. Unless verification is disabled, certificates are verified against the configured CA
+file, but the peer's hostname is _not_ checked against the certificate it presents: any
+certificate issued by a trusted CA is accepted, whichever host it was issued for. Finally, a
+`server` object holds a single TLS
 configuration, so calling `add_tls_listener()` more than once replaces the certificate files used
 by all of its TLS listeners.
 

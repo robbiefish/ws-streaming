@@ -26,7 +26,8 @@ namespace wss
      *
      * Connections can be unencrypted (`ws://` URLs) or encrypted with TLS (`wss://` URLs). To use
      * TLS, call enable_tls() to configure the certificate files to use before calling
-     * async_connect().
+     * async_connect(), or enable_tls_without_verification() to encrypt the connection without
+     * authenticating the server.
      *
      * A client object can handle multiple async_connect() calls, but only one connection attempt
      * at a time may be in progress. Connection attempts can be canceled by calling cancel(); the
@@ -74,6 +75,21 @@ namespace wss
                 const std::string& client_key_file = {});
 
             /**
+             * Enables TLS for `wss://` connections without authenticating the server. No
+             * certificate files are needed, in particular no CA file.
+             *
+             * The connection is encrypted, but whatever certificate the server presents is
+             * accepted, so there is no protection against an active man-in-the-middle. Use this
+             * only where the server is trusted by other means. Prefer enable_tls(), which verifies
+             * the server against a CA file.
+             *
+             * Because the server is not authenticated, presenting a client certificate to it
+             * serves no purpose: mutual TLS is not available in this mode. Calling this function
+             * discards any certificate files configured by an earlier call to enable_tls().
+             */
+            void enable_tls_without_verification();
+
+            /**
              * Asynchronously connects to a remote server. An HTTP GET request is made to
              * establish the WebSocket connection.
              *
@@ -91,8 +107,9 @@ namespace wss
              *     the execution context passed to the constructor.
              *
              * @throws std::invalid_argument A `wss://` URL was given, but TLS has not been
-             *     configured by a successful call to enable_tls(). The completion handler is not
-             *     called in this case.
+             *     configured by a successful call to enable_tls() or
+             *     enable_tls_without_verification(). The completion handler is not called in this
+             *     case.
              */
             void async_connect(
                 std::string_view url,
@@ -134,5 +151,6 @@ namespace wss
             std::string _ca_file;
             std::string _cert_file;
             std::string _key_file;
+            bool _verify_server = true;
     };
 }

@@ -360,6 +360,32 @@ TEST_F(TlsTest, ServerCertificateChainExchange)
     EXPECT_TRUE(result.got_data);
 }
 
+// A client which does not verify the server needs no CA file, and accepts a certificate it has no
+// way to trust
+TEST_F(TlsTest, UnverifiedClientAcceptsUntrustedServer)
+{
+    auto result = run_exchange(17425, /*mtls ca*/ {}, [&](wss::client& c) { c.enable_tls_without_verification(); });
+
+    EXPECT_TRUE(result.handler_called);
+    EXPECT_FALSE(result.connect_failed);
+    EXPECT_TRUE(result.got_data);
+}
+
+// Disabling server verification does not exempt the client from the server's own mTLS demand
+TEST_F(TlsTest, UnverifiedClientRejectedByMutualTlsServer)
+{
+    auto result =
+        run_exchange(17426, /*mtls ca*/ path("ca.crt"), [&](wss::client& c) { c.enable_tls_without_verification(); });
+
+    EXPECT_TRUE(result.connect_failed);
+    EXPECT_FALSE(result.got_data);
+}
+
+TEST_F(TlsTest, ClientContextWithoutVerificationNeedsNoFiles)
+{
+    EXPECT_NO_THROW(wss::detail::tls::make_client_tls_context_without_verification());
+}
+
 TEST_F(TlsTest, ClientContextRequiresCaFile)
 {
     EXPECT_THROW(wss::detail::tls::make_client_tls_context(""), std::invalid_argument);

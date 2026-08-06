@@ -37,9 +37,22 @@ void wss::client::enable_tls(
     _ca_file = ca_file;
     _cert_file = client_cert_file;
     _key_file = client_key_file;
+    _verify_server = true;
 
     _ssl_context = std::make_unique<boost::asio::ssl::context>(
         detail::tls::make_client_tls_context(_ca_file, _cert_file, _key_file));
+    _https_client = std::make_shared<detail::https_client>(_executor, *_ssl_context);
+}
+
+void wss::client::enable_tls_without_verification()
+{
+    _ca_file.clear();
+    _cert_file.clear();
+    _key_file.clear();
+    _verify_server = false;
+
+    _ssl_context = std::make_unique<boost::asio::ssl::context>(
+        detail::tls::make_client_tls_context_without_verification());
     _https_client = std::make_shared<detail::https_client>(_executor, *_ssl_context);
 }
 
@@ -48,7 +61,9 @@ const std::shared_ptr<wss::detail::https_client>& wss::client::ensure_https_clie
     if (!_https_client)
     {
         _ssl_context = std::make_unique<boost::asio::ssl::context>(
-            detail::tls::make_client_tls_context(_ca_file, _cert_file, _key_file));
+            _verify_server
+                ? detail::tls::make_client_tls_context(_ca_file, _cert_file, _key_file)
+                : detail::tls::make_client_tls_context_without_verification());
         _https_client = std::make_shared<detail::https_client>(_executor, *_ssl_context);
     }
 
