@@ -81,12 +81,10 @@ std::pair<
         {
             const auto& parameters = _json["interpretation"]["rule"]["parameters"];
 
-            std::optional<std::int64_t> start;
             if (auto element = parameters.value<nlohmann::json>("start", nullptr);
                     element.is_number())
                 start = element;
 
-            std::optional<std::int64_t> delta;
             if (auto element = parameters.value<nlohmann::json>("delta", nullptr);
                     element.is_number())
                 delta = element;
