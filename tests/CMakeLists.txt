@@ -1,5 +1,6 @@
 set(sources
     ./test_base64.cpp
+    ./test_metadata.cpp
     ./test_semver.cpp
 )
 
