@@ -110,17 +110,18 @@ namespace wss::detail
          *     the data contains a complete and valid packet. In this case the returned
          *     decoded_header::header_size member is set to 0 (see the Returns description).
          * @param size The size of the data pointed to by @p data in bytes.
-         * @param use_tcp_protocol True to use the direct TCP protocol instead of the WebSocket
-         *     protocol.
          *
          * @return A decoded_header structure containing the values of the packet's fields. If the
          *     pointed-to data contains a complete packet (including payload), the returned
          *     decoded_header::header_size member is set to the actual size of the header. If the
          *     data is truncated, the returned decoded_header::header_size member is set to 0.
+         *
+         * @note The packet header is identical on both transports. The direct TCP protocol
+         *     differs from the WebSocket protocol only in that packets are not wrapped in
+         *     WebSocket frames; it does not change the header's byte order.
          */
         decoded_header decode_header(
             const std::uint8_t *data,
-            std::size_t size,
-            bool use_tcp_protocol = false) noexcept;
+            std::size_t size) noexcept;
     }
 }

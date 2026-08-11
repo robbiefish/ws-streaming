@@ -386,7 +386,7 @@ std::size_t wss::detail::peer::process_packet(
     std::size_t size)
 {
     // Try to decode the WebSocket Streaming Protocol packet.
-    auto header = detail::streaming_protocol::decode_header(data, size, _use_tcp_protocol);
+    auto header = detail::streaming_protocol::decode_header(data, size);
     if (!header.header_size)
         return 0;
 
