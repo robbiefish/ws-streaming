@@ -16,7 +16,9 @@ wss::detail::linear_table::linear_table(const metadata& metadata)
 void wss::detail::linear_table::update(
     const metadata& metadata)
 {
-    _id = metadata.table_id();
+    if (const auto id = metadata.table_id(); !id.empty())
+        _id = metadata.table_id();
+
     auto [start, delta] = metadata.linear_start_delta();
 
     _value = start.value_or(_value);
