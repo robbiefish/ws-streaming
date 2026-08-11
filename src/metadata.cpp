@@ -90,7 +90,7 @@ std::pair<
                 delta = element;
         }
 
-        if (_json.contains("definition")
+        else if (_json.contains("definition")
             && _json["definition"].is_object()
             && _json["definition"].contains("linear")
             && _json["definition"]["linear"].is_object())
