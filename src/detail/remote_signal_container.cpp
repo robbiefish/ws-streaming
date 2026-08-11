@@ -38,9 +38,9 @@ wss::detail::remote_signal_container::find_table(const std::string& table_id)
     auto it = std::find_if(
         _signals_by_id.begin(),
         _signals_by_id.end(),
-        [table_id](const decltype(_signals_by_id)::value_type& entry)
+        [&table_id](const decltype(_signals_by_id)::value_type& entry)
         {
-            auto table = entry.second.signal->table();
+            const auto& table = entry.second.signal->table();
             return table && !table->id().empty() && table->id() == table_id;
         });
 
