@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -49,6 +50,8 @@ namespace wss::detail
             template <typename Func>
             void clear_remote_signals(Func&& func)
             {
+                std::scoped_lock lock(_mutex);
+
                 decltype(_signals_by_id) old_signals;
                 std::swap(old_signals, _signals_by_id);
                 _signals_by_signo.clear();
@@ -61,19 +64,17 @@ namespace wss::detail
                         func(signal.second.signal);
             }
 
-            auto remote_signals()
-            {
-                return _signals_by_id | boost::adaptors::map_values;
-            }
-
             void forget_remote_signo(unsigned signo)
             {
+                std::scoped_lock lock(_mutex);
                 _signals_by_signo.erase(signo);
             }
 
             std::shared_ptr<detail::remote_signal_impl>
             remove_remote_signal(const std::string& id)
             {
+                std::scoped_lock lock(_mutex);
+
                 auto it = _signals_by_id.find(id);
                 if (it == _signals_by_id.end())
                     return nullptr;
@@ -87,12 +88,14 @@ namespace wss::detail
 
             void set_remote_signal_signo(remote_signal_entry *entry, unsigned signo)
             {
+                std::scoped_lock lock(_mutex);
                 _signals_by_signo[signo] = entry;
                 entry->signal->signo(signo);
             }
 
         private:
 
+            mutable std::mutex _mutex;
             std::map<std::string, remote_signal_entry> _signals_by_id;
             std::map<unsigned, remote_signal_entry *> _signals_by_signo;
     };

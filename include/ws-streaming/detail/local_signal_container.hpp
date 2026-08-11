@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -36,6 +37,7 @@ namespace wss::detail
 
         private:
 
+            std::mutex _mutex;
             std::map<unsigned, std::shared_ptr<registered_local_signal>> _signals;
             unsigned _next_signo = 1;
     };

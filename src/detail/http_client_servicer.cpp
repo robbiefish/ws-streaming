@@ -40,9 +40,10 @@ void wss::detail::http_client_servicer::stop()
 {
     boost::asio::post(
         stream.get_executor(),
-        [self = shared_from_this()]()
+        [self_weak = weak_from_this()]()
         {
-            self->close();
+            if (auto self = self_weak.lock())
+                self->close();
         });
 }
 
@@ -54,11 +55,11 @@ void wss::detail::http_client_servicer::do_read()
         stream,
         buffer,
         req = {},
-        std::bind(
-            &http_client_servicer::finish_read,
-            shared_from_this(),
-            _1,
-            _2));
+        [self_weak = weak_from_this()](const boost::system::error_code& ec, std::size_t bytes_transferred)
+        {
+            if (auto self = self_weak.lock())
+                self->finish_read(ec, bytes_transferred);
+        });
 }
 
 void wss::detail::http_client_servicer::do_write(
@@ -68,17 +69,16 @@ void wss::detail::http_client_servicer::do_write(
     boost::beast::async_write(
         stream,
         std::move(msg),
-        std::bind(
-            &http_client_servicer::finish_write,
-            shared_from_this(),
-            action,
-            _1,
-            _2));
+        [self_weak = weak_from_this(), action](const boost::system::error_code& ec, std::size_t bytes_transferred)
+        {
+            if (auto self = self_weak.lock())
+                self->finish_write(action, ec, bytes_transferred);
+        });
 }
 
 void wss::detail::http_client_servicer::finish_read(
     const boost::system::error_code& ec,
-    std::size_t bytes_transferred)
+    std::size_t /*bytes_transferred*/)
 {
     if (ec)
         return close(ec);
@@ -214,7 +214,7 @@ void wss::detail::http_client_servicer::finish_read(
 void wss::detail::http_client_servicer::finish_write(
     response_actions action,
     const boost::beast::error_code& ec,
-    std::size_t bytes_transferred)
+    std::size_t /*bytes_transferred*/)
 {
     if (ec)
         return close(ec);
@@ -250,8 +250,42 @@ void wss::detail::http_client_servicer::do_response(
 
     if (!response_json.is_null())
     {
-        res.set(boost::beast::http::field::content_type, "application/json");
-        res.body() = response_json.dump();
+        bool is_success;
+
+        if (response_json.is_array())
+        {
+            is_success = true;
+            for (const auto& entry : response_json)
+            {
+                if (!entry.is_boolean() || entry != true)
+                {
+                    is_success = false;
+                    break;
+                }
+            }
+        }
+
+        else if (response_json.is_boolean())
+        {
+            is_success = response_json == true;
+        }
+
+        else
+        {
+            is_success = false;
+        }
+
+        if (is_success)
+        {
+            res.set(boost::beast::http::field::content_type, "text/plain");
+            res.body() = "Succeeded";
+        }
+
+        else
+        {
+            res.set(boost::beast::http::field::content_type, "application/json");
+            res.body() = response_json.dump();
+        }
     }
 
     do_response(res);

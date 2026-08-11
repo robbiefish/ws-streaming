@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 
@@ -11,6 +12,8 @@
 std::pair<std::shared_ptr<wss::detail::registered_local_signal>, bool>
 wss::detail::local_signal_container::add_local_signal(local_signal& signal)
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = std::find_if(
         _signals.begin(),
         _signals.end(),
@@ -36,6 +39,8 @@ wss::detail::local_signal_container::add_local_signal(local_signal& signal)
 
 unsigned wss::detail::local_signal_container::remove_local_signal(local_signal& signal)
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = std::find_if(
         _signals.begin(),
         _signals.end(),
@@ -54,12 +59,26 @@ unsigned wss::detail::local_signal_container::remove_local_signal(local_signal& 
 
 void wss::detail::local_signal_container::clear_local_signals()
 {
+    std::scoped_lock lock(_mutex);
+
+    // Manually clean up the connections so that the local_signal objects can be safely
+    // destroyed without leaving dangling pointers in the signal handlers.
+    for (auto& entry : _signals)
+    {
+        auto& signal = entry.second;
+        signal->on_data_published.disconnect();
+        signal->on_metadata_changed.disconnect();
+        signal->holder.close();
+    }
+
     _signals.clear();
 }
 
 std::shared_ptr<wss::detail::registered_local_signal>
 wss::detail::local_signal_container::find_local_signal(const std::string& id)
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = std::find_if(
         _signals.begin(),
         _signals.end(),
@@ -77,6 +96,8 @@ wss::detail::local_signal_container::find_local_signal(const std::string& id)
 std::shared_ptr<wss::detail::registered_local_signal>
 wss::detail::local_signal_container::find_local_signal(unsigned signo)
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = _signals.find(signo);
 
     if (it == _signals.end())
