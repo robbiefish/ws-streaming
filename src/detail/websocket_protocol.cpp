@@ -91,12 +91,24 @@ std::string wss::detail::websocket_protocol::get_response_key(
     sha1.get_digest(sha1_value);
 
     std::array<char, 20> sha1_bytes;
-    for (unsigned i = 0; i < 5; ++i)
+
+    // In Boost ~1.90.0 and newer, boost::uuids::detail::sha1::digest_type is a byte array.
+    if (sizeof(sha1_value[0]) == 1)
     {
-        sha1_bytes[4 * i + 0] = sha1_value[i] >> 24;
-        sha1_bytes[4 * i + 1] = sha1_value[i] >> 16;
-        sha1_bytes[4 * i + 2] = sha1_value[i] >> 8;
-        sha1_bytes[4 * i + 3] = sha1_value[i];
+        std::memcpy(sha1_bytes.data(), &sha1_value, sha1_bytes.size());
+    }
+
+    // In Boost ~1.84.0 and older, boost::uuids::detail::sha1::digest_type
+    // is an array of 32-bit words which need to be byte-swapped.
+    else
+    {
+        for (unsigned i = 0; i < 5; ++i)
+        {
+            sha1_bytes[4 * i + 0] = sha1_value[i] >> 24;
+            sha1_bytes[4 * i + 1] = sha1_value[i] >> 16;
+            sha1_bytes[4 * i + 2] = sha1_value[i] >> 8;
+            sha1_bytes[4 * i + 3] = sha1_value[i];
+        }
     }
 
     return detail::base64(sha1_bytes);
