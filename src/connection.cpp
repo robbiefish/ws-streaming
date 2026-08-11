@@ -429,6 +429,9 @@ void wss::connection::handle_subscribe(
     else if (params.is_array() && params.size() > 0 && params[0].is_string())
         signal_id = params[0];
 
+    if (signal_id.empty())
+        return;
+
     auto [added, signal] = add_remote_signal(signal_id, true);
 
     if (added)
