@@ -438,17 +438,27 @@ void wss::connection::handle_available(
             continue;
 
         auto [added, signal] = add_remote_signal(id, false);
-        if (!added)
+
+        // The signal can already be known if the peer sent a subscribe for it
+        // before advertising it (see handle_subscribe()), in which case it was recorded as
+        // hidden and never announced to the application. Now that the peer advertises it,
+        // it is an ordinary signal and must be announced. Its slots are already connected.
+        if (!added && !signal.hidden)
             continue;
 
-        signal.on_subscribe_requested = signal.signal->on_subscribe_requested.connect(
-            std::bind(&connection::on_signal_subscribe_requested, this, id));
+        if (added)
+        {
+            signal.on_subscribe_requested = signal.signal->on_subscribe_requested.connect(
+                std::bind(&connection::on_signal_subscribe_requested, this, id));
 
-        signal.on_unsubscribe_requested = signal.signal->on_unsubscribe_requested.connect(
-            std::bind(&connection::on_signal_unsubscribe_requested, this, id));
+            signal.on_unsubscribe_requested = signal.signal->on_unsubscribe_requested.connect(
+                std::bind(&connection::on_signal_unsubscribe_requested, this, id));
 
-        signal.on_table_sought = signal.signal->on_table_sought.connect(
-            std::bind(&connection::on_table_sought, this, _1));
+            signal.on_table_sought = signal.signal->on_table_sought.connect(
+                std::bind(&connection::on_table_sought, this, _1));
+        }
+
+        signal.hidden = false;
 
         on_available(signal.signal);
     }
@@ -513,11 +523,18 @@ void wss::connection::handle_unavailable(
         if (!id.is_string())
             continue;
 
+        // Hidden signals were never announced to the application
+        // they must not be withdrawn from it
+        const auto *entry = detail::remote_signal_container::find_remote_signal(
+            static_cast<std::string>(id));
+        bool hidden = entry && entry->hidden;
+
         auto signal = remove_remote_signal(id);
         if (signal)
         {
             signal->detach();
-            on_unavailable(signal);
+            if (!hidden)
+                on_unavailable(signal);
         }
     }
 }
