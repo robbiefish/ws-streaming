@@ -370,10 +370,10 @@ void wss::connection::on_signal_unsubscribe_requested(
 }
 
 std::shared_ptr<wss::detail::remote_signal_impl>
-wss::connection::on_signal_sought(
-    const std::string& signal_id)
+wss::connection::on_table_sought(
+    const std::string& table_id)
 {
-    auto *entry = detail::remote_signal_container::find_remote_signal(signal_id);
+    auto *entry = detail::remote_signal_container::find_table(table_id);
     if (entry)
         return entry->signal;
 
@@ -437,18 +437,28 @@ void wss::connection::handle_available(
         if (!id.is_string())
             continue;
 
-        auto [added, signal] = add_remote_signal(id);
-        if (!added)
+        auto [added, signal] = add_remote_signal(id, false);
+
+        // The signal can already be known if the peer sent a subscribe for it
+        // before advertising it (see handle_subscribe()), in which case it was recorded as
+        // hidden and never announced to the application. Now that the peer advertises it,
+        // it is an ordinary signal and must be announced. Its slots are already connected.
+        if (!added && !signal.hidden)
             continue;
 
-        signal.on_subscribe_requested = signal.signal->on_subscribe_requested.connect(
-            std::bind(&connection::on_signal_subscribe_requested, this, id));
+        if (added)
+        {
+            signal.on_subscribe_requested = signal.signal->on_subscribe_requested.connect(
+                std::bind(&connection::on_signal_subscribe_requested, this, id));
 
-        signal.on_unsubscribe_requested = signal.signal->on_unsubscribe_requested.connect(
-            std::bind(&connection::on_signal_unsubscribe_requested, this, id));
+            signal.on_unsubscribe_requested = signal.signal->on_unsubscribe_requested.connect(
+                std::bind(&connection::on_signal_unsubscribe_requested, this, id));
 
-        signal.on_signal_sought = signal.signal->on_signal_sought.connect(
-            std::bind(&connection::on_signal_sought, this, _1));
+            signal.on_table_sought = signal.signal->on_table_sought.connect(
+                std::bind(&connection::on_table_sought, this, _1));
+        }
+
+        signal.hidden = false;
 
         on_available(signal.signal);
     }
@@ -465,12 +475,25 @@ void wss::connection::handle_subscribe(
     else if (params.is_array() && params.size() > 0 && params[0].is_string())
         signal_id = params[0];
 
-    auto *entry = detail::remote_signal_container::find_remote_signal(static_cast<std::string>(signal_id));
-    if (!entry)
+    if (signal_id.empty())
         return;
 
-    set_remote_signal_signo(entry, signo);
-    entry->signal->handle_metadata("subscribe", params);
+    auto [added, signal] = add_remote_signal(signal_id, true);
+
+    if (added)
+    {
+        signal.on_subscribe_requested = signal.signal->on_subscribe_requested.connect(
+            std::bind(&connection::on_signal_subscribe_requested, this, signal_id));
+
+        signal.on_unsubscribe_requested = signal.signal->on_unsubscribe_requested.connect(
+            std::bind(&connection::on_signal_unsubscribe_requested, this, signal_id));
+
+        signal.on_table_sought = signal.signal->on_table_sought.connect(
+            std::bind(&connection::on_table_sought, this, _1));
+    }
+
+    set_remote_signal_signo(&signal, signo);
+    signal.signal->handle_metadata("subscribe", params);
 }
 
 void wss::connection::handle_unsubscribe(
@@ -500,11 +523,18 @@ void wss::connection::handle_unavailable(
         if (!id.is_string())
             continue;
 
+        // Hidden signals were never announced to the application
+        // they must not be withdrawn from it
+        const auto *entry = detail::remote_signal_container::find_remote_signal(
+            static_cast<std::string>(id));
+        bool hidden = entry && entry->hidden;
+
         auto signal = remove_remote_signal(id);
         if (signal)
         {
             signal->detach();
-            on_unavailable(signal);
+            if (!hidden)
+                on_unavailable(signal);
         }
     }
 }
