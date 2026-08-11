@@ -39,6 +39,8 @@ wss::detail::remote_signal_container::find_remote_signal(const std::string& id)
 wss::detail::remote_signal_container::remote_signal_entry *
 wss::detail::remote_signal_container::find_table(const std::string& table_id)
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = std::find_if(
         _signals_by_id.begin(),
         _signals_by_id.end(),
@@ -81,6 +83,8 @@ wss::detail::remote_signal_container::find_remote_signal(const std::string& id) 
 const wss::detail::remote_signal_container::remote_signal_entry *
 wss::detail::remote_signal_container::find_table(const std::string& table_id) const
 {
+    std::scoped_lock lock(_mutex);
+
     auto it = std::find_if(
         _signals_by_id.begin(),
         _signals_by_id.end(),
