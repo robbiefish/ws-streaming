@@ -365,7 +365,13 @@ void wss::detail::peer::process_websocket_frame(
 
         case detail::websocket_protocol::opcodes::BINARY:
         {
-            process_packet(data, size);
+            std::size_t offset = 0;
+            std::size_t bytes_consumed = 0;
+            do
+            {
+                bytes_consumed = process_packet(data + offset, size - offset);
+                offset += bytes_consumed;
+            } while (bytes_consumed != 0);
             break;
         }
 
