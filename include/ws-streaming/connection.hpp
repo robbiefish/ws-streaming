@@ -242,6 +242,9 @@ namespace wss
             void on_peer_closed(
                 const boost::system::error_code& ec);
 
+            void refresh_local_signal_bindings(
+                detail::registered_local_signal& signal);
+
             void on_local_signal_metadata_changed(
                 detail::registered_local_signal& signal);
 
@@ -254,7 +257,7 @@ namespace wss
 
             void on_signal_subscribe_requested(const std::string& signal_id);
             void on_signal_unsubscribe_requested(const std::string& signal_id);
-            std::shared_ptr<detail::remote_signal_impl> on_signal_sought(const std::string& signal_id);
+            std::shared_ptr<detail::remote_signal_impl> on_table_sought(const std::string& table_id);
 
             void dispatch_metadata(
                 unsigned signo,
