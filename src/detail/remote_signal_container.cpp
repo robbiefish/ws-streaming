@@ -13,7 +13,7 @@ wss::detail::remote_signal_container::add_remote_signal(
 {
     auto it = _signals_by_id.find(id);
     if (it != _signals_by_id.end())
-        return std::make_pair(true, std::ref(it->second));
+        return std::make_pair(false, std::ref(it->second));
 
     auto [jt, emplaced] = _signals_by_id.emplace(
         std::piecewise_construct,
