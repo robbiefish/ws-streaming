@@ -3,13 +3,14 @@ set(sources
     ./connection.cpp
     ./detail/command_interface_client_factory.cpp
     ./detail/dynamic_buffer.cpp
-    ./detail/http_client.cpp
-    ./detail/http_client_servicer.cpp
+    ./detail/http_version.cpp
     ./detail/http_command_interface_client.cpp
     ./detail/in_band_command_interface_client.cpp
     ./detail/linear_table.cpp
     ./detail/local_signal_container.cpp
+    ./detail/base_peer.cpp
     ./detail/peer.cpp
+    ./detail/peer_tls.cpp
     ./detail/remote_signal_container.cpp
     ./detail/remote_signal_impl.cpp
     ./detail/semver.cpp
@@ -33,6 +34,7 @@ set(headers
     ../include/ws-streaming/connection.hpp
     ../include/ws-streaming/data_types.hpp
     ../include/ws-streaming/detail/base64.hpp
+    ../include/ws-streaming/detail/base_peer.hpp
     ../include/ws-streaming/detail/command_interface_client_factory.hpp
     ../include/ws-streaming/detail/command_interface_client.hpp
     ../include/ws-streaming/detail/connected_client.hpp
@@ -40,17 +42,21 @@ set(headers
     ../include/ws-streaming/detail/dynamic_buffer.hpp
     ../include/ws-streaming/detail/http_client.hpp
     ../include/ws-streaming/detail/http_client_servicer.hpp
+    ../include/ws-streaming/detail/http_version.hpp
     ../include/ws-streaming/detail/http_command_interface_client.hpp
     ../include/ws-streaming/detail/in_band_command_interface_client.hpp
     ../include/ws-streaming/detail/json.hpp
     ../include/ws-streaming/detail/linear_table.hpp
     ../include/ws-streaming/detail/local_signal_container.hpp
     ../include/ws-streaming/detail/peer.hpp
+    ../include/ws-streaming/detail/peer_tls.hpp
     ../include/ws-streaming/detail/registered_local_signal.hpp
     ../include/ws-streaming/detail/remote_signal_container.hpp
     ../include/ws-streaming/detail/remote_signal_impl.hpp
     ../include/ws-streaming/detail/semver.hpp
+    ../include/ws-streaming/detail/ssl_stream_traits.hpp
     ../include/ws-streaming/detail/streaming_protocol.hpp
+    ../include/ws-streaming/detail/tls.hpp
     ../include/ws-streaming/detail/url.hpp
     ../include/ws-streaming/detail/websocket_protocol.hpp
     ../include/ws-streaming/dimension_builder.hpp
@@ -79,6 +85,12 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_STANDARD_REQUIRED       ON
     CXX_EXTENSIONS              OFF
     POSITION_INDEPENDENT_CODE   ON
+)
+
+target_compile_options(
+    ${PROJECT_NAME}
+        PUBLIC
+            $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
 )
 
 target_compile_definitions(
@@ -110,6 +122,8 @@ target_link_libraries(${PROJECT_NAME}
         Boost::signals2
         Boost::uuid
         nlohmann_json::nlohmann_json
+        OpenSSL::SSL
+        OpenSSL::Crypto
 )
 
 if(WS_STREAMING_INSTALL)

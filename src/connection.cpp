@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include <boost/asio/dispatch.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/endian/conversion.hpp>
 
@@ -18,6 +19,7 @@
 #include <ws-streaming/detail/in_band_command_interface_client.hpp>
 #include <ws-streaming/detail/linear_table.hpp>
 #include <ws-streaming/detail/peer.hpp>
+#include <ws-streaming/detail/peer_tls.hpp>
 #include <ws-streaming/detail/registered_local_signal.hpp>
 #include <ws-streaming/detail/remote_signal_impl.hpp>
 #include <ws-streaming/detail/semver.hpp>
@@ -32,6 +34,20 @@ wss::connection::connection(
         bool use_tcp_protocol)
     : _is_client{is_client}
     , _peer{std::make_shared<detail::peer>(std::move(socket), is_client, use_tcp_protocol)}
+    , _executor{_peer->socket().get_executor()}
+    , _local_stream_id{local_stream_id}
+{
+    _command_interfaces["jsonrpc"] = { { "httpMethod", "" } };
+}
+
+wss::connection::connection(
+        boost::asio::ssl::stream<boost::beast::tcp_stream>&& stream,
+        bool is_client,
+        std::string local_stream_id,
+        bool use_tcp_protocol)
+    : _is_client{is_client}
+    , _peer{std::make_shared<detail::peer_tls>(std::move(stream), is_client, use_tcp_protocol)}
+    , _executor{_peer->socket().get_executor()}
     , _local_stream_id{local_stream_id}
 {
     _command_interfaces["jsonrpc"] = { { "httpMethod", "" } };
@@ -358,24 +374,38 @@ void wss::connection::on_local_signal_data_published(
 void wss::connection::on_signal_subscribe_requested(
     const std::string& signal_id)
 {
-    if (!_command_interface_client)
-        return; // @todo XXX TODO
-
-    _command_interface_client->async_request(_remote_stream_id + ".subscribe", { signal_id },
-        [](const boost::system::error_code& /*ec*/, const nlohmann::json& /*response*/)
+    boost::asio::dispatch(
+        _executor,
+        [self_weak = weak_from_this(), signal_id]()
         {
+            auto self = self_weak.lock();
+            if (!self || !self->_command_interface_client)
+                return; // @todo XXX TODO
+
+            self->_command_interface_client->async_request(
+                self->_remote_stream_id + ".subscribe", { signal_id },
+                [](const boost::system::error_code& /*ec*/, const nlohmann::json& /*response*/)
+                {
+                });
         });
 }
 
 void wss::connection::on_signal_unsubscribe_requested(
     const std::string& signal_id)
 {
-    if (!_command_interface_client)
-        return; // @todo XXX TODO
-
-    _command_interface_client->async_request(_remote_stream_id + ".unsubscribe", { signal_id },
-        [](const boost::system::error_code& /*ec*/, const nlohmann::json& /*response*/)
+    boost::asio::dispatch(
+        _executor,
+        [self_weak = weak_from_this(), signal_id]()
         {
+            auto self = self_weak.lock();
+            if (!self || !self->_command_interface_client)
+                return; // @todo XXX TODO
+
+            self->_command_interface_client->async_request(
+                self->_remote_stream_id + ".unsubscribe", { signal_id },
+                [](const boost::system::error_code& /*ec*/, const nlohmann::json& /*response*/)
+                {
+                });
         });
 }
 
