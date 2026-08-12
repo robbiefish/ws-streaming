@@ -2,6 +2,7 @@ set(sources
     ./client.cpp
     ./connection.cpp
     ./detail/command_interface_client_factory.cpp
+    ./detail/dynamic_buffer.cpp
     ./detail/http_client.cpp
     ./detail/http_client_servicer.cpp
     ./detail/http_command_interface_client.cpp
@@ -36,6 +37,7 @@ set(headers
     ../include/ws-streaming/detail/command_interface_client.hpp
     ../include/ws-streaming/detail/connected_client.hpp
     ../include/ws-streaming/detail/connected_client_iterator.hpp
+    ../include/ws-streaming/detail/dynamic_buffer.hpp
     ../include/ws-streaming/detail/http_client.hpp
     ../include/ws-streaming/detail/http_client_servicer.hpp
     ../include/ws-streaming/detail/http_command_interface_client.hpp

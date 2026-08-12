@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(ws-streaming VERSION 3.0.2 LANGUAGES CXX)
 
+option(WS_STREAMING_BUILD_BENCHMARKS "Build benchmark programs"         ${PROJECT_IS_TOP_LEVEL})
 option(WS_STREAMING_BUILD_EXAMPLES  "Build example programs"            ${PROJECT_IS_TOP_LEVEL})
 option(WS_STREAMING_BUILD_TESTS     "Build unit tests"                  ${PROJECT_IS_TOP_LEVEL})
 option(WS_STREAMING_INSTALL         "Generate CMake install targets"    ON)
@@ -15,6 +16,10 @@ include(dependencies/nlohmann_json.cmake)
 include(dependencies/Threads.cmake)
 
 add_subdirectory(src)
+
+if(WS_STREAMING_BUILD_BENCHMARKS)
+    add_subdirectory(bench)
+endif()
 
 if(WS_STREAMING_BUILD_EXAMPLES)
     add_subdirectory(examples)

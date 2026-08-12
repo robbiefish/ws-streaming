@@ -18,6 +18,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <ws-streaming/detail/dynamic_buffer.hpp>
 #include <ws-streaming/detail/streaming_protocol.hpp>
 #include <ws-streaming/detail/websocket_protocol.hpp>
 
@@ -72,11 +73,14 @@ namespace wss::detail
              *     6455. The masking feature is not currently implemented.
              * @param use_tcp_protocol True to use the direct TCP protocol instead of the
              *     WebSocket-based protocol.
-             * @param rx_buffer_size The desired size of the receive buffer. The receive buffer
-             *     does not grow, so this value sets an upper bound on the size of frames the peer
-             *     can receive: larger frames will result in an error and cause the connection to
-             *     be closed. The specified value does not include the operating system's internal
-             *     receive buffer.
+             * @param rx_buffer_size The maximum size of the receive buffer. The buffer starts out
+             *     small and grows on demand up to this size, so the value sets an upper bound on
+             *     the size of frames the peer can receive: larger frames will result in an error
+             *     and cause the connection to be closed. Memory is only committed as incoming
+             *     traffic actually requires it, which matters when many connections are open at
+             *     once. Once grown, the buffer is not shrunk again for the lifetime of the peer.
+             *     The specified value does not include the operating system's internal receive
+             *     buffer.
              * @param tx_buffer_size The desired size of the transmit buffer. The transmit buffer
              *     does not grow, so this value sets an upper bound on the size of frames the peer
              *     can transmit: larger frames will result in an error and cause the connection to
@@ -231,7 +235,26 @@ namespace wss::detail
 
         private:
 
+            /**
+             * The size the receive buffer is allocated at. It grows from here on demand, so this
+             * only needs to be large enough that ordinary traffic never has to grow it.
+             */
+            static constexpr std::size_t INITIAL_RX_BUFFER_SIZE = 64 * 1024;
+
             void set_send_buffer_size(std::size_t size);
+
+            /**
+             * Grows the receive buffer, doubling it without exceeding the configured maximum.
+             *
+             * Because this reallocates, it invalidates every pointer into the receive buffer, and
+             * so must never be called while a frame is being processed: process_websocket_frame()
+             * and the on_data_received signal hand pointers into the buffer out to their callers.
+             * Both call sites therefore sit outside the parsing loop.
+             *
+             * @return True if the buffer was grown, or false if it had already reached its
+             *     configured maximum size.
+             */
+            bool grow_rx_buffer();
 
             void do_wait_rx();
             void do_wait_tx();
@@ -368,22 +391,16 @@ namespace wss::detail
             template <typename ConstBufferSequence>
             void enqueue(
                 const ConstBufferSequence& buffers,
-                std::size_t /*size*/,
+                std::size_t size,
                 bool do_shutdown_after)
             {
-                std::size_t bytes_buffered = boost::asio::buffer_copy(
-                    boost::asio::mutable_buffer(
-                        _tx_buffer.data() + _tx_buffer_bytes,
-                        _tx_buffer.size() - _tx_buffer_bytes),
-                    buffers);
-
-                _tx_buffer_bytes += bytes_buffered;
-
-                if (_tx_buffer_bytes == _tx_buffer.size())
+                // If the buffer could not take everything, the frame stream would be truncated,
+                // so the connection cannot continue.
+                if (_tx_buffer.write(buffers) < size)
                     return close(boost::asio::error::no_buffer_space);
 
                 if (do_shutdown_after)
-                    _shutdown_after = _tx_buffer_bytes;
+                    _shutdown_when_empty = true;
 
                 if (!_waiting_tx)
                     do_wait_tx();
@@ -398,13 +415,13 @@ namespace wss::detail
             bool _is_closed = false;
 
             std::vector<std::uint8_t> _rx_buffer;
-            std::vector<std::uint8_t> _tx_buffer;
+            detail::dynamic_buffer _tx_buffer;
 
             std::size_t _rx_buffer_bytes = 0;
-            std::size_t _tx_buffer_bytes = 0;
+            std::size_t _rx_buffer_max = 0;
 
             bool _waiting_tx = false;
-            std::size_t _shutdown_after = 0;
+            bool _shutdown_when_empty = false;
 
             boost::system::error_code _close_ec;
     };

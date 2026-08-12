@@ -31,8 +31,9 @@ wss::detail::peer::peer(
         std::size_t tx_buffer_size)
     : _socket{std::move(socket)}
     , _use_tcp_protocol(use_tcp_protocol)
-    , _rx_buffer(rx_buffer_size)
+    , _rx_buffer(std::min(INITIAL_RX_BUFFER_SIZE, rx_buffer_size))
     , _tx_buffer(tx_buffer_size)
+    , _rx_buffer_max(rx_buffer_size)
 {
     _socket.non_blocking(true);
     set_send_buffer_size(tx_buffer_size);
@@ -45,7 +46,16 @@ void wss::detail::peer::run()
 
 void wss::detail::peer::run(const void *data, std::size_t size)
 {
+    // Make room for the handed-over data, which arrives before any read has happened.
+    while (size > _rx_buffer.size() && grow_rx_buffer())
+    {
+        // do nothing
+    }
+
+    // The data cannot be stored, so there is nothing to process: returning here is what keeps the
+    // copy below from running past the end of the buffer.
     if (size > _rx_buffer.size())
+    {
         boost::asio::post(
             _socket.get_executor(),
             [self_weak = weak_from_this()]()
@@ -53,6 +63,9 @@ void wss::detail::peer::run(const void *data, std::size_t size)
                 if (auto self = self_weak.lock())
                     self->close(boost::asio::error::no_buffer_space);
             });
+
+        return;
+    }
 
     std::memcpy(
         _rx_buffer.data(),
@@ -111,6 +124,18 @@ void wss::detail::peer::set_send_buffer_size(std::size_t size)
     boost::system::error_code ec;
     auto option = boost::asio::socket_base::send_buffer_size{static_cast<int>(size)};
     _socket.set_option(option, ec);
+}
+
+bool wss::detail::peer::grow_rx_buffer()
+{
+    if (_rx_buffer.size() >= _rx_buffer_max)
+        return false;
+
+    // Doubling reaches the maximum in a handful of steps, and the buffer is never shrunk again,
+    // so a connection reallocates only a few times however long it lives.
+    _rx_buffer.resize(std::min(_rx_buffer.size() * 2, _rx_buffer_max));
+
+    return true;
 }
 
 void wss::detail::peer::do_wait_rx()
@@ -175,31 +200,22 @@ void wss::detail::peer::finish_wait_tx(const boost::system::error_code& wait_ec)
         return close(wait_ec);
 
     // Since the socket is writeable, write as much as we can to it.
-    std::size_t bytes_sent = _socket.send(
-        boost::asio::buffer(_tx_buffer.data(), _tx_buffer_bytes),
-        0,
-        send_ec);
+    std::size_t bytes_sent = _socket.send(_tx_buffer.data(), 0, send_ec);
 
     // Was there a genuine error writing to the socket?
     if (send_ec && send_ec != boost::asio::error::would_block)
         return close(send_ec);
 
-    // If we sent all the data in our buffer, we can stop now.
-    if (bytes_sent)
-        std::memmove(
-            _tx_buffer.data(),
-            &_tx_buffer[bytes_sent],
-            _tx_buffer_bytes - bytes_sent);
-    _tx_buffer_bytes -= bytes_sent;
+    _tx_buffer.consume(bytes_sent);
 
-    if (_shutdown_after)
-    {
-        _shutdown_after -= std::min(bytes_sent, _shutdown_after);
-        if (_shutdown_after == 0)
-            return close();
-    }
+    // If a close frame was queued, disconnect once everything queued behind it has been sent.
+    if (_shutdown_when_empty && _tx_buffer.empty())
+        return close();
 
-    if (bytes_sent < _tx_buffer_bytes)
+    // As long as anything remains buffered, a write wait must stay active: write() treats
+    // _waiting_tx as "there is buffered data ahead of you" and sends directly to the socket when
+    // it is clear.
+    if (!_tx_buffer.empty())
         do_wait_tx();
 }
 
@@ -214,29 +230,40 @@ void wss::detail::peer::process_buffer()
 
 void wss::detail::peer::process_buffer_tcp()
 {
+    std::size_t offset = 0;
+
     // Process as many streaming protocol packets as possible.
     while (true)
     {
         std::size_t bytes_consumed = process_packet(
-            _rx_buffer.data(),
-            _rx_buffer_bytes);
+            _rx_buffer.data() + offset,
+            _rx_buffer_bytes - offset);
 
         // If there's not enough data to form a complete packet, we can't process any more.
         if (!bytes_consumed)
             break;
 
-        // Consume the handled frame by sliding the remaining data in the read buffer over
-        // to the left. (Can't use std::memcpy() for this because the ranges overlap.)
-        std::memmove(
-            &_rx_buffer[0],
-            &_rx_buffer[bytes_consumed],
-            _rx_buffer_bytes - bytes_consumed);
-        _rx_buffer_bytes -= bytes_consumed;
+        // Consume the handled packet by leaving it behind: nothing is moved while the loop runs.
+        offset += bytes_consumed;
     }
 
-    // If the read buffer is still full after processing, it is an error condition
-    // (the client must be sending a frame larger than our fixed-size read buffer).
-    if (_rx_buffer_bytes == _rx_buffer.size())
+    // The loop only stops once what remains is an incomplete packet, so at most one packet is
+    // left. Slide it to the front so that the next read has the rest of the buffer to fill.
+    // (Can't use std::memcpy() for this because the ranges overlap.)
+    if (offset)
+    {
+        _rx_buffer_bytes -= offset;
+
+        std::memmove(
+            _rx_buffer.data(),
+            _rx_buffer.data() + offset,
+            _rx_buffer_bytes);
+    }
+
+    // Nothing could be parsed and the buffer is full, so the frame being received needs more room
+    // than the buffer currently has. Grow it, or give up once it has reached its maximum size:
+    // that means the remote peer is sending a frame we have no way of holding.
+    if (_rx_buffer_bytes == _rx_buffer.size() && !grow_rx_buffer())
         return close(boost::asio::error::no_buffer_space);
 
     do_wait_rx();
@@ -244,13 +271,15 @@ void wss::detail::peer::process_buffer_tcp()
 
 void wss::detail::peer::process_buffer_ws()
 {
+    std::size_t offset = 0;
+
     // Process as many WebSocket frames as possible.
     while (true)
     {
         // Try to decode the WebSocket header.
         auto header = detail::websocket_protocol::decode_header(
-            _rx_buffer.data(),
-            _rx_buffer_bytes);
+            _rx_buffer.data() + offset,
+            _rx_buffer_bytes - offset);
 
         // If there's not enough data to form a complete frame, we can't process any more.
         if (!header.header_size)
@@ -259,25 +288,34 @@ void wss::detail::peer::process_buffer_ws()
         boost::system::error_code process_ec;
         process_websocket_frame(
             header,
-            _rx_buffer.data() + header.header_size,
+            _rx_buffer.data() + offset + header.header_size,
             header.payload_size,
             process_ec);
 
         if (process_ec)
             return close(process_ec);
 
-        // Consume the handled frame by sliding the remaining data in the read buffer over
-        // to the left. (Can't use std::memcpy() for this because the ranges overlap.)
-        std::memmove(
-            &_rx_buffer[0],
-            &_rx_buffer[header.header_size + header.payload_size],
-            _rx_buffer_bytes - (header.header_size + header.payload_size));
-        _rx_buffer_bytes -= header.header_size + header.payload_size;
+        // Consume the handled frame by leaving it behind: nothing is moved while the loop runs.
+        offset += header.header_size + header.payload_size;
     }
 
-    // If the read buffer is still full after processing, it is an error condition
-    // (the client must be sending a frame larger than our fixed-size read buffer).
-    if (_rx_buffer_bytes == _rx_buffer.size())
+    // The loop only stops once what remains is an incomplete frame, so at most one frame is left.
+    // Slide it to the front so that the next read has the rest of the buffer to fill.
+    // (Can't use std::memcpy() for this because the ranges overlap.)
+    if (offset)
+    {
+        _rx_buffer_bytes -= offset;
+
+        std::memmove(
+            _rx_buffer.data(),
+            _rx_buffer.data() + offset,
+            _rx_buffer_bytes);
+    }
+
+    // Nothing could be parsed and the buffer is full, so the frame being received needs more room
+    // than the buffer currently has. Grow it, or give up once it has reached its maximum size:
+    // that means the remote peer is sending a frame we have no way of holding.
+    if (_rx_buffer_bytes == _rx_buffer.size() && !grow_rx_buffer())
         return close(boost::asio::error::no_buffer_space);
 
     do_wait_rx();
@@ -327,7 +365,13 @@ void wss::detail::peer::process_websocket_frame(
 
         case detail::websocket_protocol::opcodes::BINARY:
         {
-            process_packet(data, size);
+            std::size_t offset = 0;
+            std::size_t bytes_consumed = 0;
+            do
+            {
+                bytes_consumed = process_packet(data + offset, size - offset);
+                offset += bytes_consumed;
+            } while (bytes_consumed != 0);
             break;
         }
 
@@ -342,7 +386,7 @@ std::size_t wss::detail::peer::process_packet(
     std::size_t size)
 {
     // Try to decode the WebSocket Streaming Protocol packet.
-    auto header = detail::streaming_protocol::decode_header(data, size, _use_tcp_protocol);
+    auto header = detail::streaming_protocol::decode_header(data, size);
     if (!header.header_size)
         return 0;
 
