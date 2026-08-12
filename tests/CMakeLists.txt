@@ -2,7 +2,9 @@ set(sources
     ./test_base64.cpp
     ./test_dynamic_buffer.cpp
     ./test_metadata.cpp
+    ./test_peer_limits.cpp
     ./test_semver.cpp
+    ./test_streaming_protocol.cpp
 )
 
 foreach(source ${sources})
