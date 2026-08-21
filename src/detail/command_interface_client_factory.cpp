@@ -21,22 +21,27 @@ wss::detail::command_interface_client_factory::create_client(
     if (interfaces.contains("jsonrpc"))
         return std::make_unique<in_band_command_interface_client>(peer);
 
-    if (interfaces.contains("jsonrpc-http")
-        && interfaces["jsonrpc-http"].is_object()
-        && interfaces["jsonrpc-http"].contains("httpMethod")
-        && interfaces["jsonrpc-http"]["httpMethod"].is_string()
-        && interfaces["jsonrpc-http"].contains("httpPath")
-        && interfaces["jsonrpc-http"]["httpPath"].is_string()
-        && interfaces["jsonrpc-http"].contains("httpVersion")
-        && interfaces["jsonrpc-http"]["httpVersion"].is_string()
-        && interfaces["jsonrpc-http"].contains("port")
-        && (interfaces["jsonrpc-http"]["port"].is_string() || interfaces["jsonrpc-http"]["port"].is_number_integer()))
+    // Some peers advertise the HTTP command interface fields directly on the
+    // commandInterfaces object rather than nested under "jsonrpc-http".
+    const nlohmann::json& http =
+        interfaces.contains("jsonrpc-http") && interfaces["jsonrpc-http"].is_object()
+            ? interfaces["jsonrpc-http"]
+            : interfaces;
+
+    if (http.contains("httpMethod")
+        && http["httpMethod"].is_string()
+        && http.contains("httpPath")
+        && http["httpPath"].is_string()
+        && http.contains("httpVersion")
+        && http["httpVersion"].is_string()
+        && http.contains("port")
+        && (http["port"].is_string() || http["port"].is_number_integer()))
     {
         std::string port;
-        if (interfaces["jsonrpc-http"]["port"].is_number_integer())
-            port = std::to_string(interfaces["jsonrpc-http"]["port"].is_number_integer());
+        if (http["port"].is_number_integer())
+            port = std::to_string(http["port"].is_number_integer());
         else
-            port = interfaces["jsonrpc-http"]["port"];
+            port = http["port"];
 
         std::string remote_endpoint_address;
         try
@@ -53,9 +58,9 @@ wss::detail::command_interface_client_factory::create_client(
             peer->socket().get_executor(),
             remote_endpoint_address,
             port,
-            interfaces["jsonrpc-http"]["httpMethod"],
-            interfaces["jsonrpc-http"]["httpPath"],
-            interfaces["jsonrpc-http"]["httpVersion"]);
+            http["httpMethod"],
+            http["httpPath"],
+            http["httpVersion"]);
     }
 
     // There are no available/supported command interfaces.
