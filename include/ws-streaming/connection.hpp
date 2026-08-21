@@ -230,6 +230,20 @@ namespace wss
             > on_available;
 
             /**
+             * A Boost.Signals2 signal raised when a new remote signal becomes known to the
+             * connection without having been advertised by the remote peer.
+             *
+             * @param signal A std::shared_ptr to the newly available signal.
+             *
+             * @throws ... Connected slots should not throw exceptions. If they do, they will
+             *     propagate out to the execution context. This can result in an unhandled
+             *     exception on a thread and terminate the process.
+             */
+            boost::signals2::signal<
+                void(remote_signal_ptr signal)
+            > on_undeclared_available;
+
+            /**
              * A Boost.Signals2 signal raised when a remote signal is no longer available from the
              * remote peer. This can occur if the remote peer indicates the signal is no longer
              * available, or when the connection has been closed. No further event signals will

@@ -533,6 +533,11 @@ void wss::connection::handle_subscribe(
     }
 
     set_remote_signal_signo(&signal, signo);
+
+    // Announce before handling the metadata so slots are connected for anything it raises.
+    if (added && signal.hidden)
+        on_undeclared_available(signal.signal);
+
     signal.signal->handle_metadata("subscribe", params);
 }
 
