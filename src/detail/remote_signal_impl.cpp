@@ -198,6 +198,12 @@ void wss::detail::remote_signal_impl::handle_signal(
     if (!table_id.empty() && table_id != id())
     {
         _domain_signal = on_table_sought(table_id).value_or(nullptr);
+
+        // A signal whose table id is an abstract name (not a signal id) can resolve to itself:
+        // storing that shared_ptr would create a self-reference cycle and leak the object.
+        if (_domain_signal.get() == this)
+            _domain_signal.reset();
+
         if (_domain_signal)
             _domain_table = _domain_signal->_table;
         else
